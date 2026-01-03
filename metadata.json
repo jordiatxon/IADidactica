@@ -1,0 +1,5 @@
+{
+  "name": "DC Electric Circuit Simulator",
+  "description": "A high-fidelity simulation of a DC electric circuit featuring thermal electron vibration, battery chemistry dynamics, and precise geometric representations of conductors and components.",
+  "requestFramePermissions": []
+}
