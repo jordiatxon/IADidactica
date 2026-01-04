@@ -4,18 +4,16 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 // Constants based on specification
 const OUTER_W = 650;
 const OUTER_H = 400;
-const INNER_W = 620;
-const INNER_H = 370;
 const CONDUCTOR_W = 15;
-const TRACK_W = 635; // midline width: (650 + 620) / 2 - 15? No, (OuterW - ConductorW)
+const TRACK_W = 635; // midline width: (OUTER_W - CONDUCTOR_W)
 const TRACK_H = 385; // midline height
-const PERIMETER = 2040; // 2 * (635 + 385)
+const PERIMETER = 2 * (TRACK_W + TRACK_H); // 2040
 const ELECTRON_COUNT = 1000;
 const SPEED_PX_S = 20;
 const ELECTROLYTE_DRAIN_S = 5;
 const ION_DRAIN_S = 5;
 
-// The rail starts at offset 7.5, 7.5 relative to the outer rectangle top-left.
+// The rail midline starts at offset 7.5 relative to the outer rectangle top-left.
 const RAIL_OFFSET = 7.5;
 
 const getXY = (trackPos: number): { x: number; y: number; angle: number; isHorizontal: boolean } => {
@@ -68,7 +66,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const initialElectrons = Array.from({ length: ELECTRON_COUNT }).map(() => ({
       trackPos: Math.random() * PERIMETER,
-      transversePos: (Math.random() - 0.5) * 14, // 14 to stay slightly inside the 15px width
+      transversePos: (Math.random() - 0.5) * 12, // Slightly less than CONDUCTOR_W to ensure they are visibly inside
       vx: (Math.random() * 2 + 1) * (Math.random() > 0.5 ? 1 : -1),
       vy: (Math.random() * 2 + 1) * (Math.random() > 0.5 ? 1 : -1),
       vfreq: `${(Math.random() * 0.3 + 0.2).toFixed(2)}s`
@@ -107,10 +105,8 @@ const App: React.FC = () => {
         // Generate battery chemistry electrons
         if (Math.random() > 0.7) {
           const id = batteryElectronIdCounter.current++;
-          // Negative pole is the right side of battery: 100 to 150px within battery rect
-          // Battery is centered at top, translating group (100, 100) + battery pos (250, -37.5)
-          const startX = 100 + 250 + 100 + Math.random() * 50; 
-          const startY = 100 - 37.5 + Math.random() * 75;
+          const startX = 100 + (325 - 75) + 100 + Math.random() * 50; 
+          const startY = 100 + RAIL_OFFSET - 37.5 + Math.random() * 75;
           setBatteryElectrons(prev => [...prev, { id, x: startX, y: startY }]);
         }
       }
@@ -150,7 +146,6 @@ const App: React.FC = () => {
     const segments = [];
     for (let p = 0; p < PERIMETER; p += 60) {
       const { x, y, angle } = getXY(p);
-      // Skip battery area: top rail center 150px
       const isTopRail = Math.abs(y - RAIL_OFFSET) < 1;
       const inBatteryX = x >= 325 - 75 && x <= 325 + 75;
       if (!(isTopRail && inBatteryX)) {
@@ -171,20 +166,21 @@ const App: React.FC = () => {
   }, []);
 
   return (
-    <div className="flex flex-col items-center justify-center w-full h-full bg-black relative">
-      {/* Title */}
-      <div className="absolute top-[10px] text-white text-[20px] font-bold" style={{ fontFamily: 'Arial' }}>
+    <div className="flex flex-col items-center w-full h-full bg-black overflow-hidden relative">
+      {/* Title (Kept at lowered 40px margin) */}
+      <h1 className="mt-[40px] text-white text-[20px] font-bold text-center" style={{ fontFamily: 'Arial' }}>
         Representació del circuit elèctric de corrent continu
-      </div>
+      </h1>
 
-      <svg width="850" height="600" viewBox="0 0 850 600" className="relative">
-        <g transform="translate(100, 100)">
-          {/* Bulb - Rendered under conductor but visible through it */}
+      <svg width="850" height="480" viewBox="0 0 850 480" className="flex-shrink-0 mt-4">
+        <g transform="translate(100, 50)">
+          {/* Bulb - Behind conductor at bottom-mid-left area */}
           <circle
             cx={318 + RAIL_OFFSET} 
             cy={TRACK_H + RAIL_OFFSET}
             r="40"
-            fill={isCircuitClosed && !isBatteryDead ? "#FFFF00" : "#D3D3D3"}
+            fill={isCircuitClosed && !isBatteryDead ? "#FFFF00" : "#333"}
+            filter={isCircuitClosed && !isBatteryDead ? "drop-shadow(0 0 10px yellow)" : ""}
           />
 
           {/* Conductor Frame */}
@@ -195,15 +191,13 @@ const App: React.FC = () => {
             fillRule="evenodd"
           />
 
-          {/* Electrons */}
+          {/* Electrons strictly inside conductor */}
           {electrons.map((e, i) => {
             const { x, y, isHorizontal } = getXY(e.trackPos);
             const cx = isHorizontal ? x : x + e.transversePos;
             const cy = isHorizontal ? y + e.transversePos : y;
 
-            // Hide electrons under battery (top center)
             const isUnderBattery = (Math.abs(y - RAIL_OFFSET) < 1 && x >= 325 - 75 && x <= 325 + 75);
-            // Hide electrons under switch if open (50px right of battery)
             const switchXStart = 325 + 75 + 50;
             const isUnderSwitch = !isCircuitClosed && (Math.abs(y - RAIL_OFFSET) < 1 && x >= switchXStart && x <= switchXStart + 30);
 
@@ -227,7 +221,7 @@ const App: React.FC = () => {
             );
           })}
 
-          {/* Electric Field */}
+          {/* Electric Field markers */}
           {isCircuitClosed && !isBatteryDead && fieldSegments.map((seg, i) => (
             <line
               key={i}
@@ -241,7 +235,7 @@ const App: React.FC = () => {
             />
           ))}
 
-          {/* Switch (Pulsador) */}
+          {/* Switch (Pulsador) visible when open */}
           {!isCircuitClosed && (
             <rect x={325 + 75 + 50} y={RAIL_OFFSET - 10} width="30" height="20" fill="black" />
           )}
@@ -264,7 +258,7 @@ const App: React.FC = () => {
             <div className="w-full h-full flex items-center justify-center">
               <button
                 onClick={handleToggle}
-                className="px-4 py-2 bg-gray-900 border border-gray-600 rounded text-white hover:bg-gray-800 transition-colors"
+                className="px-6 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white hover:bg-gray-800 transition-all active:scale-95 shadow-lg"
                 style={{ fontSize: '16px', fontFamily: 'Arial' }}
               >
                 {isBatteryDead ? "Bateria esgotada. Torna a carregar-la." : "Clic per obrir/tancar el circuit"}
@@ -273,45 +267,45 @@ const App: React.FC = () => {
           </foreignObject>
         </g>
 
-        {/* Battery electrons sliding */}
+        {/* Battery chemical electrons */}
         {batteryElectrons.map(be => (
           <circle key={be.id} cx={be.x} cy={be.y} r="1.5" fill="red" />
         ))}
       </svg>
 
-      {/* Legends */}
-      <div className="absolute bottom-[20px] left-[100px] grid grid-cols-2 gap-x-12 gap-y-2 text-white text-[14px]" style={{ fontFamily: 'Arial' }}>
+      {/* Legends (Moved to the bottom, roughly 30px below the bulb/bottom segment) */}
+      <div className="mt-4 mb-8 grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-3 text-white text-[13px] max-w-5xl px-4" style={{ fontFamily: 'Arial' }}>
+        <div className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 rounded-full bg-red-600" />
+          <span>Electrons lliures.</span>
+        </div>
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-red-600" />
-          <span>Electrons lliures del conductor.</span>
+          <span>Electrons química.</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-red-600" />
-          <span>Electrons alliberats per la química de la bateria.</span>
+          <span className="text-blue-500 font-bold text-[22px] leading-none">+</span>
+          <span>Àtom positiu</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-blue-500 font-bold text-[30px] leading-none">+</span>
-          <span>Àtom amb càrrega positiva</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-1.5 h-1.5 bg-gray-400" />
+          <div className="w-2 h-2 bg-gray-400" />
           <span>Manganès</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-1.5 h-1.5 bg-blue-300" />
+          <div className="w-2 h-2 bg-blue-300" />
           <span>Electròlit</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-1.5 h-1.5 bg-pink-300" />
+          <div className="w-2 h-2 bg-pink-300" />
           <span>Zinc</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 md:col-span-2 justify-center md:justify-start">
           <div className="flex gap-1">
-            <div className="w-[2px] h-[10px] bg-[#A020F0]" />
-            <div className="w-[2px] h-[10px] bg-[#A020F0]" />
-            <div className="w-[2px] h-[10px] bg-[#A020F0]" />
+            <div className="w-[3px] h-[12px] bg-[#A020F0]" />
+            <div className="w-[3px] h-[12px] bg-[#A020F0]" />
+            <div className="w-[3px] h-[12px] bg-[#A020F0]" />
           </div>
-          <span>Camp Elèctric.</span>
+          <span className="ml-1">Camp Elèctric.</span>
         </div>
       </div>
     </div>
