@@ -23,25 +23,21 @@ const getXY = (trackPos: number): { x: number; y: number; angle: number; isHoriz
   let isHorizontal = true;
 
   if (trackPos <= TRACK_W) {
-    // Top segment (left to right)
     x = RAIL_OFFSET + trackPos;
     y = RAIL_OFFSET;
     angle = 0;
     isHorizontal = true;
   } else if (trackPos <= TRACK_W + TRACK_H) {
-    // Right segment (top to bottom)
     x = RAIL_OFFSET + TRACK_W;
     y = RAIL_OFFSET + (trackPos - TRACK_W);
     angle = 90;
     isHorizontal = false;
   } else if (trackPos <= 2 * TRACK_W + TRACK_H) {
-    // Bottom segment (right to left)
     x = RAIL_OFFSET + TRACK_W - (trackPos - (TRACK_W + TRACK_H));
     y = RAIL_OFFSET + TRACK_H;
     angle = 180;
     isHorizontal = true;
   } else {
-    // Left segment (bottom to top)
     x = RAIL_OFFSET;
     y = RAIL_OFFSET + TRACK_H - (trackPos - (2 * TRACK_W + TRACK_H));
     angle = 270;
@@ -58,11 +54,11 @@ const App: React.FC = () => {
   const [visibleIons, setVisibleIons] = useState(75);
   const [electrons, setElectrons] = useState<{ trackPos: number; transversePos: number; vx: number; vy: number; vfreq: string }[]>([]);
   const [batteryElectrons, setBatteryElectrons] = useState<{ id: number; x: number; y: number }[]>([]);
+  const [imageError, setImageError] = useState(false);
   
   const lastTimeRef = useRef<number>(0);
   const batteryElectronIdCounter = useRef(0);
 
-  // Initialize electrons once
   useEffect(() => {
     const initialElectrons = Array.from({ length: ELECTRON_COUNT }).map(() => ({
       trackPos: Math.random() * PERIMETER,
@@ -74,7 +70,6 @@ const App: React.FC = () => {
     setElectrons(initialElectrons);
   }, []);
 
-  // Main Loop
   useEffect(() => {
     let animationFrame: number;
     let lastSecond = 0;
@@ -85,13 +80,11 @@ const App: React.FC = () => {
       lastTimeRef.current = time;
 
       if (isCircuitClosed && !isBatteryDead) {
-        // Move circuit electrons clockwise
         setElectrons(prev => prev.map(e => ({
           ...e,
           trackPos: (e.trackPos + SPEED_PX_S * deltaTime) % PERIMETER
         })));
 
-        // Battery dynamics
         if (time - lastSecond >= 1000) {
           lastSecond = time;
           setElectrolyteHeight(h => {
@@ -102,9 +95,6 @@ const App: React.FC = () => {
           setVisibleIons(i => Math.max(0, i - ION_DRAIN_S));
         }
 
-        // Generate battery chemistry electrons inside the Zinc pole (Negative)
-        // Battery group starts at x=250. Zinc pole is at x=100 relative to battery.
-        // So Zinc x is between 350 and 400 relative to the main group.
         if (Math.random() > 0.7) {
           const id = batteryElectronIdCounter.current++;
           const startX = 350 + Math.random() * 45; 
@@ -113,18 +103,15 @@ const App: React.FC = () => {
         }
       }
 
-      // Slide battery electrons towards the conductor entry (top rail, right of battery)
       setBatteryElectrons(prev => prev.map(be => {
-        const targetX = 325 + 75; // Right edge of battery
+        const targetX = 325 + 75;
         const targetY = RAIL_OFFSET;
-        // Directional vector
         const dx = targetX - be.x;
         const dy = targetY - be.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         
         if (dist < 5) return { ...be, x: targetX, y: targetY, dead: true };
         
-        // Move slowly towards the exit point
         return { 
           ...be, 
           x: be.x + (dx / dist) * 100 * deltaTime, 
@@ -174,114 +161,150 @@ const App: React.FC = () => {
   }, []);
 
   return (
-    <div className="flex flex-col items-center w-full h-full bg-black overflow-hidden relative">
-      <h1 className="mt-[40px] text-white text-[20px] font-bold text-center" style={{ fontFamily: 'Arial' }}>
+    <div className="flex flex-col items-center w-full min-h-screen bg-black overflow-y-auto pb-20">
+      <h1 className="mt-[40px] mb-8 text-white text-[20px] font-bold text-center px-4" style={{ fontFamily: 'Arial' }}>
         Representació del circuit elèctric de corrent continu
       </h1>
 
-      <svg width="850" height="480" viewBox="0 0 850 480" className="flex-shrink-0 mt-4">
-        <g transform="translate(100, 50)">
-          {/* Bulb - Behind conductor */}
-          <circle
-            cx={318 + RAIL_OFFSET} 
-            cy={TRACK_H + RAIL_OFFSET}
-            r="40"
-            fill={isCircuitClosed && !isBatteryDead ? "#FFFF00" : "#333"}
-            filter={isCircuitClosed && !isBatteryDead ? "drop-shadow(0 0 10px yellow)" : ""}
-          />
-
-          {/* Conductor Frame */}
-          <path
-            d={`M 0,0 L ${OUTER_W},0 L ${OUTER_W},${OUTER_H} L 0,${OUTER_H} Z 
-                M ${CONDUCTOR_W},${CONDUCTOR_W} L ${CONDUCTOR_W},${OUTER_H - CONDUCTOR_W} L ${OUTER_W - CONDUCTOR_W},${OUTER_H - CONDUCTOR_W} L ${OUTER_W - CONDUCTOR_W},${CONDUCTOR_W} Z`}
-            fill="white"
-            fillRule="evenodd"
-          />
-
-          {/* Electrons strictly inside conductor */}
-          {electrons.map((e, i) => {
-            const { x, y, isHorizontal } = getXY(e.trackPos);
-            const cx = isHorizontal ? x : x + e.transversePos;
-            const cy = isHorizontal ? y + e.transversePos : y;
-
-            const isUnderBattery = (Math.abs(y - RAIL_OFFSET) < 1 && x >= 325 - 75 && x <= 325 + 75);
-            const switchXStart = 325 + 75 + 50;
-            const isUnderSwitch = !isCircuitClosed && (Math.abs(y - RAIL_OFFSET) < 1 && x >= switchXStart && x <= switchXStart + 30);
-
-            if (isUnderBattery || isUnderSwitch) return null;
-
-            return (
-              <circle
-                key={i}
-                cx={cx}
-                cy={cy}
-                r="1"
-                fill="red"
-                className={!isCircuitClosed ? "electron-vibrate" : ""}
-                style={{
-                  // @ts-ignore
-                  '--vx': `${e.vx}px`,
-                  '--vy': `${e.vy}px`,
-                  '--vfreq': e.vfreq
-                }}
+      {/* Main Content Area */}
+      <div className="flex flex-col lg:flex-row items-center justify-center w-full max-w-7xl px-4 gap-8 lg:gap-12">
+        
+        {/* Left Side: PilaVolta representation */}
+        <div className="flex flex-col items-center justify-center shrink-0 w-[300px]">
+          <div className={`w-full min-h-[350px] flex items-center justify-center p-2 rounded-xl border border-gray-700/50 bg-gray-900/30 transition-all duration-700 ${isCircuitClosed && !isBatteryDead ? 'shadow-[0_0_40px_rgba(59,130,246,0.4)] border-blue-500/50' : 'grayscale-[40%]'}`}>
+            {!imageError ? (
+              <img 
+                src="https://raw.githubusercontent.com/jordiatxon/Electrons/main/PilaVolta.jpg" 
+                alt="" 
+                className="max-w-full h-auto rounded-lg shadow-2xl"
+                onLoad={() => setImageError(false)}
+                onError={() => setImageError(true)}
               />
-            );
-          })}
+            ) : (
+              <div className="flex flex-col items-center gap-4 opacity-50">
+                {/* Visual Placeholder: Stylized Volta Pile icon */}
+                <svg width="60" height="200" viewBox="0 0 60 200">
+                  {[...Array(12)].map((_, i) => (
+                    <rect key={i} x="5" y={10 + i * 15} width="50" height="8" rx="2" fill={i % 2 === 0 ? "#ccc" : "#a8a8a8"} />
+                  ))}
+                  <line x1="30" y1="0" x2="30" y2="10" stroke="white" strokeWidth="2" />
+                  <line x1="30" y1="190" x2="30" y2="200" stroke="white" strokeWidth="2" />
+                </svg>
+              </div>
+            )}
+          </div>
+          <p className="mt-4 text-white text-[13px] text-center leading-relaxed" style={{ fontFamily: 'Arial' }}>
+            Pila de Volta amb monedes de 10 cèntims (coure), capa de vinagre i volanderes cincades (Zinc). S'usa un Led com a bombeta.
+          </p>
+        </div>
 
-          {/* Electric Field markers */}
-          {isCircuitClosed && !isBatteryDead && fieldSegments.map((seg, i) => (
-            <line
-              key={i}
-              x1={seg.x}
-              y1={seg.y - 25}
-              x2={seg.x}
-              y2={seg.y + 25}
-              stroke="#A020F0"
-              strokeWidth="2"
-              transform={`rotate(${seg.angle}, ${seg.x}, ${seg.y})`}
-            />
-          ))}
+        {/* Right Side: Circuit SVG */}
+        <div className="shrink-0 flex items-center justify-center bg-gray-900/20 rounded-2xl p-4 border border-white/5">
+          <svg width="800" height="480" viewBox="0 0 850 480" className="max-w-full h-auto">
+            <g transform="translate(100, 50)">
+              {/* Bulb */}
+              <circle
+                cx={318 + RAIL_OFFSET} 
+                cy={TRACK_H + RAIL_OFFSET}
+                r="40"
+                fill={isCircuitClosed && !isBatteryDead ? "#FFFF00" : "#333"}
+                filter={isCircuitClosed && !isBatteryDead ? "drop-shadow(0 0 15px yellow)" : ""}
+              />
 
-          {/* Switch (Pulsador) visible when open */}
-          {!isCircuitClosed && (
-            <rect x={325 + 75 + 50} y={RAIL_OFFSET - 10} width="30" height="20" fill="black" />
-          )}
+              {/* Conductor Frame */}
+              <path
+                d={`M 0,0 L ${OUTER_W},0 L ${OUTER_W},${OUTER_H} L 0,${OUTER_H} Z 
+                    M ${CONDUCTOR_W},${CONDUCTOR_W} L ${CONDUCTOR_W},${OUTER_H - CONDUCTOR_W} L ${OUTER_W - CONDUCTOR_W},${OUTER_H - CONDUCTOR_W} L ${OUTER_W - CONDUCTOR_W},${CONDUCTOR_W} Z`}
+                fill="white"
+                fillRule="evenodd"
+              />
 
-          {/* Battery - Centered at top rail */}
-          <g transform={`translate(${325 - 75}, ${RAIL_OFFSET - 37.5})`}>
-            <rect x="0" y="0" width="150" height="75" fill="white" stroke="black" strokeWidth="1" />
-            <rect x="0" y="0" width="50" height="75" fill="#D3D3D3" />
-            {positiveIons.slice(0, visibleIons).map((ion, idx) => (
-              <text key={idx} x={5 + (ion.c * 8)} y={12 + (ion.r * 4.5)} fill="blue" fontSize="12" fontFamily="Arial" textAnchor="middle">+</text>
-            ))}
-            <rect x="50" y={75 - electrolyteHeight} width="50" height={electrolyteHeight} fill="#ADD8E6" />
-            <rect x="100" y="0" width="50" height="75" fill="#FFC0CB" />
-            <text x="25" y="105" fill="#A020F0" fontSize="30" fontFamily="Arial" textAnchor="middle">+</text>
-            <text x="125" y="105" fill="#A020F0" fontSize="30" fontFamily="Arial" textAnchor="middle">-</text>
-          </g>
+              {/* Electrons */}
+              {electrons.map((e, i) => {
+                const { x, y, isHorizontal } = getXY(e.trackPos);
+                const cx = isHorizontal ? x : x + e.transversePos;
+                const cy = isHorizontal ? y + e.transversePos : y;
 
-          {/* Released electrons chemical (Zinc pole) */}
-          {batteryElectrons.map(be => (
-            <circle key={be.id} cx={be.x} cy={be.y} r="1.5" fill="red" />
-          ))}
+                const isUnderBattery = (Math.abs(y - RAIL_OFFSET) < 1 && x >= 325 - 75 && x <= 325 + 75);
+                const switchXStart = 325 + 75 + 50;
+                const isUnderSwitch = !isCircuitClosed && (Math.abs(y - RAIL_OFFSET) < 1 && x >= switchXStart && x <= switchXStart + 30);
 
-          {/* Centered Button */}
-          <foreignObject x="150" y="150" width="350" height="100">
-            <div className="w-full h-full flex items-center justify-center">
-              <button
-                onClick={handleToggle}
-                className="px-6 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white hover:bg-gray-800 transition-all active:scale-95 shadow-lg"
-                style={{ fontSize: '16px', fontFamily: 'Arial' }}
-              >
-                {isBatteryDead ? "Bateria esgotada. Torna a carregar-la." : "Clic per obrir/tancar el circuit"}
-              </button>
-            </div>
-          </foreignObject>
-        </g>
-      </svg>
+                if (isUnderBattery || isUnderSwitch) return null;
+
+                return (
+                  <circle
+                    key={i}
+                    cx={cx}
+                    cy={cy}
+                    r="1.2"
+                    fill="red"
+                    className={!isCircuitClosed ? "electron-vibrate" : ""}
+                    style={{
+                      // @ts-ignore
+                      '--vx': `${e.vx}px`,
+                      '--vy': `${e.vy}px`,
+                      '--vfreq': e.vfreq
+                    }}
+                  />
+                );
+              })}
+
+              {/* Electric Field */}
+              {isCircuitClosed && !isBatteryDead && fieldSegments.map((seg, i) => (
+                <line
+                  key={i}
+                  x1={seg.x}
+                  y1={seg.y - 25}
+                  x2={seg.x}
+                  y2={seg.y + 25}
+                  stroke="#A020F0"
+                  strokeWidth="2"
+                  transform={`rotate(${seg.angle}, ${seg.x}, ${seg.y})`}
+                />
+              ))}
+
+              {/* Switch */}
+              {!isCircuitClosed && (
+                <rect x={325 + 75 + 50} y={RAIL_OFFSET - 10} width="30" height="20" fill="black" />
+              )}
+
+              {/* Battery */}
+              <g transform={`translate(${325 - 75}, ${RAIL_OFFSET - 37.5})`}>
+                <rect x="0" y="0" width="150" height="75" fill="white" stroke="black" strokeWidth="1" />
+                <rect x="0" y="0" width="50" height="75" fill="#D3D3D3" />
+                {positiveIons.slice(0, visibleIons).map((ion, idx) => (
+                  <text key={idx} x={5 + (ion.c * 8)} y={12 + (ion.r * 4.5)} fill="blue" fontSize="12" fontFamily="Arial" textAnchor="middle">+</text>
+                ))}
+                <rect x="50" y={75 - electrolyteHeight} width="50" height={electrolyteHeight} fill="#ADD8E6" />
+                <rect x="100" y="0" width="50" height="75" fill="#FFC0CB" />
+                <text x="25" y="105" fill="#A020F0" fontSize="30" fontFamily="Arial" textAnchor="middle">+</text>
+                <text x="125" y="105" fill="#A020F0" fontSize="30" fontFamily="Arial" textAnchor="middle">-</text>
+              </g>
+
+              {/* Battery chemical electrons */}
+              {batteryElectrons.map(be => (
+                <circle key={be.id} cx={be.x} cy={be.y} r="1.5" fill="red" />
+              ))}
+
+              {/* Interaction Button */}
+              <foreignObject x="150" y="150" width="350" height="100">
+                <div className="w-full h-full flex items-center justify-center">
+                  <button
+                    onClick={handleToggle}
+                    className="px-6 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white hover:bg-gray-800 transition-all active:scale-95 shadow-xl"
+                    style={{ fontSize: '16px', fontFamily: 'Arial' }}
+                  >
+                    {isBatteryDead ? "Bateria esgotada. Torna a carregar-la." : "Clic per obrir/tancar el circuit"}
+                  </button>
+                </div>
+              </foreignObject>
+            </g>
+          </svg>
+        </div>
+      </div>
 
       {/* Legends */}
-      <div className="mt-[41px] mb-8 grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-3 text-white text-[13px] max-w-5xl px-4" style={{ fontFamily: 'Arial' }}>
+      <div className="mt-12 mb-12 grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-4 text-white text-[13px] max-w-5xl px-6" style={{ fontFamily: 'Arial' }}>
         <div className="flex items-center gap-2">
           <div className="w-2.5 h-2.5 rounded-full bg-red-600" />
           <span>Electrons lliures.</span>
@@ -306,13 +329,28 @@ const App: React.FC = () => {
           <div className="w-2 h-2 bg-pink-300" />
           <span>Zinc</span>
         </div>
-        <div className="flex items-center gap-2 md:col-span-2 justify-center md:justify-start">
+        <div className="flex items-center gap-2 md:col-span-2">
           <div className="flex gap-1">
             <div className="w-[3px] h-[12px] bg-[#A020F0]" />
             <div className="w-[3px] h-[12px] bg-[#A020F0]" />
             <div className="w-[3px] h-[12px] bg-[#A020F0]" />
           </div>
           <span className="ml-1">Camp Elèctric.</span>
+        </div>
+      </div>
+
+      {/* Reference Image at Bottom */}
+      <div className="mt-8 flex flex-col items-center gap-4 border-t border-gray-800 pt-12 w-full max-w-4xl px-4">
+        <div className="bg-gray-900/50 p-2 rounded-xl border border-gray-700/50 shadow-2xl overflow-hidden max-w-full">
+          <img 
+            src="https://raw.githubusercontent.com/jordiatxon/Electrons/main/4.pila%20muntada%2Blumm.jpg" 
+            alt="" 
+            className="max-w-full h-auto rounded-md"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+              (e.target as HTMLImageElement).parentElement!.style.display = 'none';
+            }}
+          />
         </div>
       </div>
     </div>
