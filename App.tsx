@@ -174,8 +174,8 @@ const App: React.FC = () => {
           <div className={`w-full min-h-[350px] flex items-center justify-center p-2 rounded-xl border border-gray-700/50 bg-gray-900/30 transition-all duration-700 ${isCircuitClosed && !isBatteryDead ? 'shadow-[0_0_40px_rgba(59,130,246,0.4)] border-blue-500/50' : 'grayscale-[40%]'}`}>
             {!imageError ? (
               <img 
-                src="https://raw.githubusercontent.com/jordiatxon/Electrons/main/PilaVolta.jpg" 
-                alt="" 
+                src="https://raw.githubusercontent.com/jordiatxon/Electrons/main/Pila%20de%20Volta.jpg" 
+                alt="Pila de Volta" 
                 className="max-w-full h-auto rounded-lg shadow-2xl"
                 onLoad={() => setImageError(false)}
                 onError={() => setImageError(true)}
@@ -344,7 +344,7 @@ const App: React.FC = () => {
         <div className="bg-gray-900/50 p-2 rounded-xl border border-gray-700/50 shadow-2xl overflow-hidden max-w-full">
           <img 
             src="https://raw.githubusercontent.com/jordiatxon/Electrons/main/4.pila%20muntada%2Blumm.jpg" 
-            alt="" 
+            alt="Referència Pila" 
             className="max-w-full h-auto rounded-md"
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = 'none';
